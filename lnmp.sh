@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Debian 12 原生 LNMP 生产级管理中枢 v5.3 (终极护城河稳定版)
+# Debian 12 原生 LNMP 生产级管理中枢 v5.4 (精简定制版)
 # ==========================================
 
 GREEN='\033[0;32m'
@@ -265,22 +265,6 @@ EOF
     echo -e "-> ${YELLOW}完成 (Buffer: ${BUFFER_M}MB, MaxConn: ${MAX_CONN})${NC}"
 }
 
-opt_redis() {
-    echo -e "${GREEN}正在激活 Redis IPC(Unix Socket) 与内存淘汰策略...${NC}"
-    MEM=$(free -m | awk '/Mem:/ {print $2}')
-    REDIS_MEM=$((MEM * 20 / 100)); [ "$REDIS_MEM" -lt 64 ] && REDIS_MEM=64
-    usermod -aG redis www-data
-    
-    grep -q "^maxmemory " /etc/redis/redis.conf || echo -e "\nmaxmemory ${REDIS_MEM}mb\nmaxmemory-policy allkeys-lru\nunixsocket /run/redis/redis-server.sock\nunixsocketperm 770" >> /etc/redis/redis.conf
-    sed -i "s/^maxmemory .*/maxmemory ${REDIS_MEM}mb/" /etc/redis/redis.conf
-    sed -i 's/^maxmemory-policy.*/maxmemory-policy allkeys-lru/' /etc/redis/redis.conf
-    sed -i 's/^#*\s*unixsocket \/.*/unixsocket \/run\/redis\/redis-server.sock/' /etc/redis/redis.conf
-    sed -i 's/^#*\s*unixsocketperm.*/unixsocketperm 770/' /etc/redis/redis.conf
-    
-    systemctl restart redis-server
-    echo -e "-> ${YELLOW}完成 (限额: ${REDIS_MEM}MB)${NC}"
-}
-
 optimize_lnmp() {
     echo -e "${GREEN}=========================================${NC}"
     echo -e "        LNMP 生产环境极客压榨中心"
@@ -289,19 +273,17 @@ optimize_lnmp() {
     echo -e " 2) 重构 Nginx 高并发模式与抗爆破映射"
     echo -e " 3) 调校 PHP-FPM 防 OOM 进程池"
     echo -e " 4) 优化 MariaDB 动态内存缓冲与极速 IO"
-    echo -e " 5) 激活 Redis 内存直连 (Unix Socket)"
-    echo -e " 6) ${YELLOW}一键执行全部极限优化 (推荐)${NC}"
+    echo -e " 5) ${YELLOW}一键执行全部极限优化 (推荐)${NC}"
     echo -e " 0) 退出"
     echo -e "========================================="
-    read -p "请选择优化项 [0-6]: " OPT_CHOICE
+    read -p "请选择优化项 [0-5]: " OPT_CHOICE
     
     case "$OPT_CHOICE" in
         1) opt_kernel ;;
         2) opt_nginx ;;
         3) opt_php ;;
         4) opt_mariadb ;;
-        5) opt_redis ;;
-        6) opt_kernel; opt_nginx; opt_php; opt_mariadb; opt_redis ;;
+        5) opt_kernel; opt_nginx; opt_php; opt_mariadb ;;
         0) exit 0 ;;
         *) echo -e "${RED}无效选项！${NC}" ;;
     esac
@@ -614,7 +596,7 @@ case "$COMMAND" in
         ;;
     *)
         echo -e "${GREEN}=========================================${NC}"
-        echo -e "  Debian 12 LNMP 管理中枢 v5.3 (终极护城河稳定版)"
+        echo -e "  Debian 12 LNMP 管理中枢 v5.4 (精简定制版)"
         echo -e "${GREEN}=========================================${NC}"
         echo -e "系统运维:"
         echo -e "  lnmp install       - 基础构建 (拉取稳定源/安全加固)"
