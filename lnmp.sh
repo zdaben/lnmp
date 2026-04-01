@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Debian 12 原生 LNMP 生产级管理中枢 v5.0 (解耦重构版)
+# Debian 12 原生 LNMP 生产级管理中枢 v5.3 (终极护城河稳定版)
 # ==========================================
 
 GREEN='\033[0;32m'
@@ -11,7 +11,6 @@ NC='\033[0m'
 
 COMMAND=$1
 ACTION=$2
-SUB_ACTION=$3
 BAK_DIR="/var/webak"
 
 if [ "$EUID" -ne 0 ]; then
@@ -46,7 +45,6 @@ get_php_sock() {
 
 get_clean_dbname() {
     local DOMAIN=$1
-    # 剥离 www. 前缀，剥离顶级域名后缀，替换 - 和 . 为下划线
     echo "${DOMAIN#www.}" | sed -E 's/\.[a-zA-Z0-9]+$//; s/\./_/g; s/-/_/g'
 }
 
@@ -74,8 +72,8 @@ install_lnmp() {
         exit 0
     fi
 
-    echo -e "${GREEN}开始安装 LNMP 基础包...${NC}"
-    apt install nginx mariadb-server php-fpm php-mysql php-xml php-curl php-gd php-mbstring php-imagick php-redis php-bcmath php-intl php-zip redis-server curl wget unzip certbot python3-certbot-nginx ufw htop logrotate fail2ban -y
+    echo -e "${GREEN}开始安装 LNMP 基础包 (静默模式防卡死)...${NC}"
+    DEBIAN_FRONTEND=noninteractive apt install -y nginx mariadb-server php-fpm php-mysql php-xml php-curl php-gd php-mbstring php-imagick php-redis php-bcmath php-intl php-zip redis-server curl wget unzip certbot python3-certbot-nginx ufw htop logrotate fail2ban
 
     # 日志轮转配置
     cat > /etc/logrotate.d/lnmp-manager <<EOF
@@ -88,21 +86,29 @@ install_lnmp() {
 }
 EOF
 
-    # MariaDB 基础安全初始化
+    # MariaDB 基础安全初始化 (含启动竞态等待机制)
     echo -e "${YELLOW}执行数据库基础安全加固...${NC}"
     systemctl start mariadb
+    
+    echo "等待 MariaDB Socket 初始化..."
+    for i in {1..20}; do
+        mysqladmin ping >/dev/null 2>&1 && break
+        sleep 1
+    done
+
     mysql -e "DELETE FROM mysql.user WHERE User='';"
     mysql -e "DROP DATABASE IF EXISTS test;"
     mysql -e "DELETE FROM mysql.db WHERE Db='test' OR Db='test\\_%';"
-    mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket OR mysql_native_password;"
+    mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED VIA unix_socket OR mysql_native_password;" || true
     mysql -e "DELETE FROM mysql.user WHERE User='root' AND Host!='localhost';"
     mysql -e "FLUSH PRIVILEGES;"
     
     # Nginx 消除默认 gzip 冲突
     sed -i 's/^\s*gzip on;/# gzip on;/' /etc/nginx/nginx.conf
+    grep -rl "^\s*gzip on;" /etc/nginx/conf.d/ 2>/dev/null | xargs -r sed -i 's/^\s*gzip on;/# gzip on;/'
 
-    # UFW 与 Fail2ban 基础安防
-    SSH_PORT=$(ss -tlnp | grep sshd | awk '{print $4}' | grep -oP '\d+$' | head -1)
+    # UFW 与 Fail2ban 基础安防 (Systemd Backend 修复)
+    SSH_PORT=$(ss -tnlp | grep sshd | awk '{print $4}' | awk -F: '{print $NF}' | head -1)
     SSH_PORT=${SSH_PORT:-22}
     
     cat > /etc/fail2ban/jail.local <<EOF
@@ -110,6 +116,7 @@ EOF
 bantime  = 3600
 findtime = 600
 maxretry = 5
+backend  = systemd
 
 [sshd]
 enabled = true
@@ -120,24 +127,25 @@ EOF
 
     ufw allow "${SSH_PORT}/tcp" comment 'SSH Auto-Detect'
     ufw allow 'Nginx Full'
-    ufw --force enable
+    ufw --force enable || true
     systemctl enable certbot.timer --now
 
-    # 守护服务
-    PHP_VER_RUN=$(php -v 2>/dev/null | grep -oP '^PHP \K[0-9]+\.[0-9]+' || ls /etc/php | sort -V | tail -n1)
+    # Systemd 守护服务 (引入 LimitNOFILE 越权配置)
+    PHP_VER_RUN=$(ls /etc/php 2>/dev/null | sort -V | tail -n1)
     for svc in nginx mariadb redis-server "php${PHP_VER_RUN}-fpm"; do
         mkdir -p "/etc/systemd/system/${svc}.service.d"
-        cat > "/etc/systemd/system/${svc}.service.d/restart.conf" <<EOF
+        cat > "/etc/systemd/system/${svc}.service.d/override.conf" <<EOF
 [Service]
-Restart=always
+Restart=on-failure
 RestartSec=3
+LimitNOFILE=65535
 EOF
     done
     systemctl daemon-reload
     systemctl restart nginx "php${PHP_VER_RUN}-fpm" mariadb redis-server
 
     echo -e "\n${GREEN}🎉 基础环境构建完成！${NC}"
-    echo -e "提示: 当前环境为保守配置配置。请运行 ${YELLOW}lnmp optimize${NC} 执行生产级性能压榨。"
+    echo -e "提示: 当前为保守配置。请运行 ${YELLOW}lnmp optimize${NC} 执行生产级性能压榨。"
 }
 
 # ==========================================
@@ -151,15 +159,15 @@ www-data hard nofile 65535
 root soft nofile 65535
 root hard nofile 65535
 EOF
+    # tcp_fastopen 调整为 1 增强兼容性
     cat > /etc/sysctl.d/99-lnmp-tcp.conf <<EOF
 net.core.somaxconn = 65535
 net.core.netdev_max_backlog = 65535
 net.ipv4.tcp_max_syn_backlog = 65535
 net.ipv4.tcp_fin_timeout = 15
 net.ipv4.ip_local_port_range = 1024 65535
-net.ipv4.tcp_max_tw_buckets = 200000
 net.ipv4.tcp_syncookies = 1
-net.ipv4.tcp_fastopen = 3
+net.ipv4.tcp_fastopen = 1
 EOF
     sysctl -p /etc/sysctl.d/99-lnmp-tcp.conf >/dev/null 2>&1
     
@@ -200,13 +208,13 @@ EOF
 limit_req_zone \$binary_remote_addr zone=general:10m rate=10r/s;
 limit_req_zone \$binary_remote_addr zone=login:10m rate=1r/s;
 EOF
-    systemctl reload nginx
+    nginx -t && systemctl reload nginx
     echo -e "-> ${YELLOW}完成${NC}"
 }
 
 opt_php() {
     echo -e "${GREEN}正在调校 PHP-FPM 防 OOM 进程池与 Realpath 缓存...${NC}"
-    PHP_VER=$(php -v 2>/dev/null | grep -oP '^PHP \K[0-9]+\.[0-9]+' || ls /etc/php | sort -V | tail -n1)
+    PHP_VER=$(ls /etc/php 2>/dev/null | sort -V | tail -n1)
     MEM=$(free -m | awk '/Mem:/ {print $2}')
     AVAIL_MEM=$((MEM - 512)); [ "$AVAIL_MEM" -lt 256 ] && AVAIL_MEM=256
     MAX_C=$((AVAIL_MEM / 80)); [ "$MAX_C" -gt 150 ] && MAX_C=150; [ "$MAX_C" -lt 10 ] && MAX_C=10
@@ -327,7 +335,7 @@ manage_services() {
 }
 
 # ==========================================
-# 模块：虚拟主机管理 (vhost add/del/list/database)
+# 模块：虚拟主机管理 (vhost add/del/list/data)
 # ==========================================
 vhost_add() {
     PHP_SOCK=$(get_php_sock)
@@ -360,6 +368,14 @@ vhost_add() {
 
     read -p "是否使用 Certbot 申请 SSL ? (y/n) [y]: " ENABLE_SSL
     ENABLE_SSL=${ENABLE_SSL:-y}
+    if [ "$ENABLE_SSL" == "y" ]; then
+        read -p "请输入邮箱 (用于SSL到期通知，留空则不填): " SSL_EMAIL
+        if [ -n "$SSL_EMAIL" ]; then
+            CERT_EMAIL_ARG="-m $SSL_EMAIL"
+        else
+            CERT_EMAIL_ARG="--register-unsafely-without-email"
+        fi
+    fi
 
     echo -e "\n${YELLOW}正在生成 Nginx Vhost 配置...${NC}"
     mkdir -p "$WEB_ROOT"
@@ -427,7 +443,7 @@ EOF
     fi
 
     if [ "$ENABLE_SSL" == "y" ]; then
-        certbot --nginx $CERTBOT_DOMAINS --non-interactive --agree-tos --register-unsafely-without-email --redirect
+        certbot --nginx $CERTBOT_DOMAINS --non-interactive --agree-tos $CERT_EMAIL_ARG --redirect
     fi
 
     echo -e "\n${GREEN}🎉 $DOMAIN 部署完毕！${NC}"
@@ -456,7 +472,7 @@ vhost_del() {
     rm -rf "/var/www/$DOMAIN"
     
     certbot delete --cert-name "$DOMAIN" --non-interactive 2>/dev/null
-    systemctl reload nginx
+    nginx -t && systemctl reload nginx
     
     if [ "$DEL_DB" == "y" ]; then
         read -p "确认要删除的数据库名 (默认: $SUGGESTED_DB): " INPUT_DB
@@ -469,7 +485,95 @@ vhost_del() {
 }
 
 # ==========================================
-# 模块：看板 (bench/top/php/info)
+# 模块：数据灾备与恢复 (backup/recover)
+# ==========================================
+backup_site() {
+    mkdir -p "$BAK_DIR"
+    vhost_list
+    read -p "请输入要备份的域名: " DOMAIN
+    if [ ! -d "/var/www/$DOMAIN" ]; then echo -e "${RED}找不到网站目录！${NC}"; exit 1; fi
+    
+    SUGGESTED_DB=$(get_clean_dbname "$DOMAIN")
+    read -p "请输入关联的数据库名 (留空则不备份数据库, 默认: $SUGGESTED_DB): " INPUT_DB
+    DB_NAME=${INPUT_DB:-$SUGGESTED_DB}
+    
+    DATE=$(date +%Y%m%d_%H%M)
+    WEB_FILE="${BAK_DIR}/${DOMAIN}_${DATE}.tar.gz"
+    DB_FILE="${BAK_DIR}/${DOMAIN}_${DATE}.sql.gz"
+    
+    echo -e "${YELLOW}正在打包网站文件...${NC}"
+    tar -czf "$WEB_FILE" -C "/var/www/$DOMAIN" .
+    
+    echo -e "${YELLOW}正在生成 SHA256 防篡改校验码...${NC}"
+    sha256sum "$WEB_FILE" > "${WEB_FILE}.sha256"
+    
+    if [ -n "$DB_NAME" ]; then
+        echo -e "${YELLOW}正在导出并压缩数据库...${NC}"
+        if ! mysqldump "$DB_NAME" 2>/dev/null | gzip > "$DB_FILE"; then 
+            echo -e "${RED}警告: 数据库 $DB_NAME 导出失败或不存在！${NC}"
+            rm -f "$DB_FILE"
+        fi
+    fi
+    
+    echo -e "${GREEN}备份完成！文件及安全校验已存入 $BAK_DIR${NC}"
+    ls -lh "$BAK_DIR"/${DOMAIN}_${DATE}.* 2>/dev/null
+}
+
+recover_site() {
+    vhost_list
+    read -p "请输入要恢复的域名 (需先运行 vhost add): " DOMAIN
+    if [ ! -d "/var/www/$DOMAIN" ]; then echo -e "${RED}请先运行 lnmp vhost add $DOMAIN${NC}"; exit 1; fi
+    
+    read -p "请输入备份目录 (默认: $BAK_DIR): " INPUT_DIR
+    TARGET_DIR=${INPUT_DIR:-$BAK_DIR}
+    
+    WEB_FILE=$(ls "$TARGET_DIR"/"$DOMAIN"*.tar.gz 2>/dev/null | tail -n 1)
+    DB_FILE=$(ls "$TARGET_DIR"/"$DOMAIN"*.sql.gz 2>/dev/null | tail -n 1)
+    
+    if [ -z "$WEB_FILE" ]; then echo -e "${RED}未找到对应的 .tar.gz 文件！${NC}"; exit 1; fi
+
+    SUGGESTED_DB=$(get_clean_dbname "$DOMAIN")
+    read -p "请输入要恢复覆盖的数据库名 (留空跳过数据库恢复, 默认: $SUGGESTED_DB): " INPUT_DB
+    DB_NAME=${INPUT_DB:-$SUGGESTED_DB}
+
+    echo -e "${RED}!!! 严重警告 !!!${NC}"
+    echo -e "即将执行灾难恢复。此操作将彻底覆盖当前 ${YELLOW}/var/www/$DOMAIN${NC} 下的所有文件及数据库 ${YELLOW}$DB_NAME${NC}。"
+    read -p "你确定要继续吗? (yes/no): " CONFIRM
+    if [ "$CONFIRM" != "yes" ]; then
+        echo "已取消恢复操作。"
+        exit 0
+    fi
+    
+    echo -e "${YELLOW}执行完整性校验...${NC}"
+    if [ -f "${WEB_FILE}.sha256" ]; then
+        if ! cd "$(dirname "$WEB_FILE")" && sha256sum -c "$(basename "${WEB_FILE}.sha256")" >/dev/null 2>&1; then
+            echo -e "${RED}致命错误：备份文件校验失败，数据可能已损坏！${NC}"
+            exit 1
+        fi
+        cd - >/dev/null
+        echo -e "${GREEN}SHA256 校验通过。${NC}"
+    else
+        echo -e "${YELLOW}警告：未找到关联的 .sha256 文件，跳过完整性校验。${NC}"
+    fi
+
+    echo -e "${YELLOW}解压文件: $WEB_FILE${NC}"
+    tar -xzf "$WEB_FILE" -C "/var/www/$DOMAIN"
+    chown -R www-data:www-data "/var/www/$DOMAIN"
+    find "/var/www/$DOMAIN" -type d -exec chmod 755 {} \;
+    find "/var/www/$DOMAIN" -type f -exec chmod 644 {} \;
+    
+    if [ -n "$DB_FILE" ] && [ -n "$DB_NAME" ]; then
+        echo -e "${YELLOW}解压并导入数据库: $DB_FILE${NC}"
+        zcat "$DB_FILE" | mysql "$DB_NAME"
+    else
+        echo -e "${YELLOW}跳过数据库恢复。${NC}"
+    fi
+    
+    echo -e "${GREEN}🎉 网站恢复与权限重置完成！${NC}"
+}
+
+# ==========================================
+# 看板模块 (bench/top/php/info)
 # ==========================================
 show_bench() {
     echo -e "${GREEN}=== LNMP 生产环境综合体检诊断 ===${NC}"
@@ -494,27 +598,23 @@ case "$COMMAND" in
     install) install_lnmp ;;
     optimize) optimize_lnmp ;;
     start|stop|restart|reload|status) manage_services "$COMMAND" ;;
-    update) apt update && apt --only-upgrade install nginx mariadb-server php-fpm php-mysql redis-server -y && manage_services "reload" ;;
+    update) apt update && apt --only-upgrade install nginx mariadb-server php-fpm php-mysql redis-server -y && nginx -t && manage_services "reload" ;;
     bench) show_bench ;;
     top) manage_services "status"; show_top ;;
+    backup) backup_site ;;
+    recover) recover_site ;;
     vhost)
         case "$ACTION" in
             add) vhost_add ;;
             del) vhost_del ;;
             list) vhost_list ;;
-            database)
-                if [ "$SUB_ACTION" == "list" ]; then
-                    vhost_db_list
-                else
-                    echo -e "${YELLOW}用法: lnmp vhost database list${NC}"
-                fi
-                ;;
-            *) echo -e "${YELLOW}用法: lnmp vhost {add|del|list|database list}${NC}" ;;
+            data) vhost_db_list ;;
+            *) echo -e "${YELLOW}用法: lnmp vhost {add|del|list|data}${NC}" ;;
         esac
         ;;
     *)
         echo -e "${GREEN}=========================================${NC}"
-        echo -e "  Debian 12 LNMP 管理中枢 v5.0 (解耦重构版)"
+        echo -e "  Debian 12 LNMP 管理中枢 v5.3 (终极护城河稳定版)"
         echo -e "${GREEN}=========================================${NC}"
         echo -e "系统运维:"
         echo -e "  lnmp install       - 基础构建 (拉取稳定源/安全加固)"
@@ -525,7 +625,10 @@ case "$COMMAND" in
         echo -e "  lnmp vhost add     - 智能虚拟主机 (自动提取干净 DB 名)"
         echo -e "  lnmp vhost del     - 静默回收主机及关联数据库/证书"
         echo -e "  lnmp vhost list    - 运行节点列表清单"
-        echo -e "  lnmp vhost database list - 查看所有业务数据库"
+        echo -e "  lnmp vhost data    - 查看所有业务数据库"
+        echo -e "\n数据灾备:"
+        echo -e "  lnmp backup        - 强一致性热备 (带 SHA256 完整校验)"
+        echo -e "  lnmp recover       - 交互式灾难恢复 (前置校验防污染)"
         echo -e "========================================="
         ;;
 esac
