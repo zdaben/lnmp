@@ -1,5 +1,19 @@
-# lnmp
-Debian 12 原生 LNMP 生产级管理中枢
+# lnmp Debian 12 原生 LNMP 生产级管理中枢
+
+```Bash
+apt update -y && apt install curl wget sudo -y && curl -sSLo /usr/local/bin/lnmp https://raw.githubusercontent.com/zdaben/lnmp/refs/heads/main/lnmp.sh && chmod +x /usr/local/bin/lnmp && lnmp install
+```
+
+## 执行逻辑解析：
+
+apt update -y && apt install...：静默更新源并安装必备依赖。
+
+curl -sSLo...：静默下载脚本并保存到指定系统变量路径。
+
+chmod +x...：赋予脚本可执行权限。
+
+lnmp install：触发自动化部署流程。
+
 
 ## 第一步：安装必备的下载工具
 先更新一下软件源，并安装 curl（我把 wget 和 sudo 也加上以防万一）：
