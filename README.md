@@ -1,29 +1,29 @@
-# lnmp Debian 12 原生 LNMP 生产级管理中枢
+# Debian 12 原生 LNMP 环境管理工具 v5.5 (专业稳定版)
 
+## 一键安装脚本
 
 ```Bash
 apt update -y && apt install curl wget sudo -y && curl -sSLo /usr/local/bin/lnmp https://raw.githubusercontent.com/zdaben/lnmp/refs/heads/main/lnmp.sh && chmod +x /usr/local/bin/lnmp && lnmp install
 ```
 
+```Bash
 apt update -y && apt install...：静默更新源并安装必备依赖。
-
 curl -sSLo...：静默下载脚本并保存到指定系统变量路径。
-
 chmod +x...：赋予脚本可执行权限。
-
 lnmp install：触发自动化部署流程。
+```
 
 
 
-# 执行逻辑解析：
-## 第一步：安装必备的下载工具
+## 执行逻辑解析：
+### 第一步：安装必备的下载工具
 先更新一下软件源，并安装 curl（我把 wget 和 sudo 也加上以防万一）：
 
 ```Bash
 apt update -y
 apt install curl wget sudo -y
 ```
-## 第二步：重新下载并授权
+### 第二步：重新下载并授权
 安装好 curl 后，直接重新运行以下命令（已为你去除多余的 sudo）：
 
 ```Bash
@@ -31,7 +31,7 @@ curl -sSLo /usr/local/bin/lnmp https://raw.githubusercontent.com/zdaben/lnmp/ref
 chmod +x /usr/local/bin/lnmp
 ```
 
-##第三步：开始自动化部署
+### 第三步：开始自动化部署
 只要上面没有报错，就说明脚本已经就绪，可以直接开始安装了：
 
 ```Bash
@@ -39,7 +39,7 @@ lnmp install
 ```
 
 
-# echo 系统运维:
+## echo 系统运维:
 ```bash
 ## 系统运维:
 lnmp install       - 基础构建 (拉取稳定源/安全加固)"
