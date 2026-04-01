@@ -41,17 +41,18 @@ lnmp install
 
 # echo 系统运维:
 ```bash
-        echo -e "  lnmp install       - 基础构建 (拉取稳定源/安全加固)"
-        echo -e "  lnmp optimize      - 性能调优 (动态配置内核与连接池)"
-        echo -e "  lnmp update        - 核心环境组件平滑升级"
-        echo -e "  lnmp status/top    - 服务运行状态巡检与看板"
-        echo -e "\n虚拟主机:"
-        echo -e "  lnmp vhost add     - 智能虚拟主机 (自动提取干净 DB 名)"
-        echo -e "  lnmp vhost del     - 静默回收主机及关联数据库/证书"
-        echo -e "  lnmp vhost list    - 运行节点列表清单"
-        echo -e "  lnmp vhost data    - 查看所有业务数据库"
-        echo -e "  lnmp vhost ssl     - 为已有站点独立部署 SSL 证书"
-        echo -e "\n数据灾备:"
-        echo -e "  lnmp backup        - 强一致性热备 (带 SHA256 完整校验)"
-        echo -e "  lnmp recover       - 交互式灾难恢复 (前置校验防污染)"
+## 系统运维:
+lnmp install       - 基础构建 (拉取稳定源/安全加固)"
+lnmp optimize      - 性能调优 (动态配置内核与连接池)"
+lnmp update        - 核心环境组件平滑升级"
+lnmp status/top    - 服务运行状态巡检与看板"
+## 虚拟主机:
+lnmp vhost add     - 智能虚拟主机 (自动提取干净 DB 名)"
+lnmp vhost del     - 静默回收主机及关联数据库/证书"
+lnmp vhost list    - 运行节点列表清单"
+lnmp vhost data    - 查看所有业务数据库"
+lnmp vhost ssl     - 为已有站点独立部署 SSL 证书"
+## 数据灾备:
+lnmp backup        - 强一致性热备 (带 SHA256 完整校验)"
+lnmp recover       - 交互式灾难恢复 (前置校验防污染)"
 ```
