@@ -21,6 +21,7 @@ nano /etc/ssh/sshd_config
 找到并修改以下字段（去掉行首的 #）：
 
 Plaintext
+Port 22
 PubkeyAuthentication yes
 PasswordAuthentication no
 PermitEmptyPasswords no
