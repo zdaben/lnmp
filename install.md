@@ -1,0 +1,84 @@
+Debian 12 完整生产环境恢复标准操作流程（SOP）
+阶段一：配置 SSH 密钥登录并加固安全
+建议先用 root 密码登录服务器完成密钥配置，测试无误后再关闭密码登录。
+
+1. 写入 SSH 公钥
+Bash
+# 创建 .ssh 目录并设置正确权限
+mkdir -p ~/.ssh
+chmod 700 ~/.ssh
+
+# 编辑并粘贴你的公钥 (ssh-rsa AAAAB3N...)
+nano ~/.ssh/authorized_keys
+
+# 设置公钥文件权限
+chmod 600 ~/.ssh/authorized_keys
+2. 加固 SSH 服务
+编辑 SSH 配置文件，禁用密码登录和空密码：
+
+Bash
+nano /etc/ssh/sshd_config
+找到并修改以下字段（去掉行首的 #）：
+
+Plaintext
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitEmptyPasswords no
+3. 重启 SSH 服务生效
+Bash
+systemctl restart ssh
+⚠️ 警告：此时请保持当前终端不关闭，新开一个终端尝试使用 SSH Key 登录，确认成功后再关闭原终端，以免配置错误导致失联。
+
+阶段二：部署 LNMP v5.7 专业稳定版
+利用我们刚刚打造的管理中枢，极速构建并压榨系统性能。
+
+1. 下载并全局安装管理脚本
+Bash
+apt update -y && apt install curl wget sudo -y
+curl -sSLo /usr/local/bin/lnmp https://raw.githubusercontent.com/zdaben/lnmp/refs/heads/main/lnmp.sh
+chmod +x /usr/local/bin/lnmp
+2. 部署基础环境与安全矩阵
+Bash
+lnmp install
+注：按提示输入 y 确认，等待安装与 MariaDB/Fail2ban/UFW 初始化完成。
+
+3. 执行生产级一键极限调优
+Bash
+lnmp optimize
+注：输入 5，一键应用内核、Nginx、PHP 进程池与 MariaDB 的动态算力分配。
+
+阶段三：网站复活与跨代迁移 (核心步骤)
+由于备份是旧环境 (LNMP.org) 手动打包的，我们需要采用“新环境建壳 + 手动覆盖 + 剥离旧缓存”的安全迁移法。
+
+1. 使用 v5.5 脚本创建标准空壳环境
+Bash
+lnmp vhost add
+域名：输入 hho.icu，并绑定 www
+
+数据库：确认创建，默认数据库名 hho，设置一个强密码并记牢。
+
+SSL：确认申请，填入邮箱。
+
+2. 物理恢复网站文件与数据库
+假设你已经将旧备份文件上传到了服务器的 /var/webak/ 目录下。
+
+Bash
+# 1. 解压源文件直接覆盖刚生成的 vhost 空壳目录
+tar -xzf /var/webak/hho.icu_20260331.tar.gz -C /var/www/
+
+# 2. 导入旧数据库数据到新创建的 hho 数据库中
+mysql hho < /var/webak/hho.icu_20260331.sql
+3. 肃清旧环境幽灵隐患与权限重置 (极其重要)
+这一步为了解决 No input file specified. 报错和图片无法上传的问题。
+
+Bash
+cd /var/www/hho.icu
+
+# 解锁并删除旧版防跨站文件
+chattr -i .user.ini 2>/dev/null
+rm -f .user.ini
+
+# 强制重置新环境的权限归属
+chown -R www-data:www-data /var/www/hho.icu
+find /var/www/hho.icu -type d -exec chmod 755 {} \;
+find /var/www/hho.icu -type f -exec chmod 644 {} \;
