@@ -1,12 +1,14 @@
-Debian 12 完整生产环境恢复标准操作流程（SOP）
+## Debian 12 完整生产环境恢复标准操作流程（SOP）
 阶段一：配置 SSH 密钥登录并加固安全
 建议先用 root 密码登录服务器完成密钥配置，测试无误后再关闭密码登录。
 
 1. 写入 SSH 公钥
-Bash
+
+```Bash
 # 创建 .ssh 目录并设置正确权限
 mkdir -p ~/.ssh
 chmod 700 ~/.ssh
+```
 
 # 编辑并粘贴你的公钥 (ssh-rsa AAAAB3N...)
 nano ~/.ssh/authorized_keys
