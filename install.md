@@ -70,9 +70,9 @@ lnmp optimize
 ```Bash
 lnmp vhost add
 ```
-域名：输入 hho.icu，并绑定 www
+域名：输入 example.com，并绑定 www
 
-数据库：确认创建，默认数据库名 hho，设置一个强密码并记牢。
+数据库：确认创建，默认数据库名 example，设置一个强密码并记牢。
 
 SSL：确认申请，填入邮箱。
 
@@ -81,19 +81,19 @@ SSL：确认申请，填入邮箱。
 
 ```Bash
 # 1. 解压源文件直接覆盖刚生成的 vhost 空壳目录
-tar -xzf /var/webak/hho.icu_20260331.tar.gz -C /var/www/
+tar -xzf /var/webak/example.com_20260331.tar.gz -C /var/www/
 ```
 
-### 2. 导入旧数据库数据到新创建的 hho 数据库中
+### 2. 导入旧数据库数据到新创建的 example 数据库中
 ```
-mysql hho < /var/webak/hho.icu_20260331.sql
+mysql example < /var/webak/example.com_20260331.sql
 ```
 
 ### 3. 肃清旧环境幽灵隐患与权限重置 (极其重要)
 这一步为了解决 No input file specified. 报错和图片无法上传的问题。
 
 ```Bash
-cd /var/www/hho.icu
+cd /var/www/example.com
 ```
 
 #### 解锁并删除旧版防跨站文件
@@ -104,7 +104,7 @@ rm -f .user.ini
 
 #### 强制重置新环境的权限归属
 ```Bash
-chown -R www-data:www-data /var/www/hho.icu
-find /var/www/hho.icu -type d -exec chmod 755 {} \;
-find /var/www/hho.icu -type f -exec chmod 644 {} \;
+chown -R www-data:www-data /var/www/example.com
+find /var/www/example.com -type d -exec chmod 755 {} \;
+find /var/www/example.com -type f -exec chmod 644 {} \;
 ```
