@@ -672,7 +672,7 @@ case "$COMMAND" in
         ;;
     *)
         echo -e "${GREEN}=========================================${NC}"
-        echo -e "  Debian 12 LNMP 管理中枢 v5.5 (专业稳定版)"
+        echo -e "  Debian 12 LNMP 管理中枢 v5.7 (专业稳定版)"
         echo -e "${GREEN}=========================================${NC}"
         echo -e "系统运维:"
         echo -e "  lnmp install       - 基础构建 (拉取稳定源/安全加固)"
