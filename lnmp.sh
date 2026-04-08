@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Debian 12 原生 LNMP 环境管理工具 v5.7 (专业稳定版)
+# Debian 12 原生 LNMP 环境管理工具 v6.0 (专业稳定版)
 # ==========================================
 
 GREEN='\033[0;32m'
@@ -308,6 +308,58 @@ optimize_lnmp() {
 }
 
 # ==========================================
+# 模块：核心组件平滑升级 (update)
+# ==========================================
+update_lnmp() {
+    echo -e "${GREEN}正在拉取软件源最新版本数据...${NC}"
+    apt-get update -y >/dev/null 2>&1
+
+    echo -e "\n${YELLOW}=== 核心组件升级预检 ===${NC}"
+    local has_updates=0
+    local update_targets=""
+    local check_pkgs=("nginx" "mariadb-server" "php-fpm" "php-mysql" "redis-server")
+
+    for pkg in "${check_pkgs[@]}"; do
+        # 提取当前安装版本和源内候选版本
+        local installed=$(apt-cache policy "$pkg" 2>/dev/null | grep "Installed:" | awk '{print $2}')
+        local candidate=$(apt-cache policy "$pkg" 2>/dev/null | grep "Candidate:" | awk '{print $2}')
+
+        # 如果未安装该组件则跳过
+        if [ "$installed" == "(none)" ] || [ -z "$installed" ]; then
+            continue
+        fi
+
+        # 版本对比
+        if [ "$installed" != "$candidate" ]; then
+            echo -e "$pkg: ${RED}$installed${NC} -> ${GREEN}$candidate${NC}"
+            has_updates=1
+            update_targets="$update_targets $pkg"
+        else
+            echo -e "$pkg: ${GREEN}$installed${NC} (已是最新)"
+        fi
+    done
+
+    if [ "$has_updates" -eq 0 ]; then
+        echo -e "\n${GREEN}所有核心组件均处于最新稳定状态，无需更新。${NC}"
+        return 0
+    fi
+
+    echo -e "------------------------------------"
+    read -p "是否确认升级上述发现新版本的组件？(y/n) [n]: " CONFIRM_UPDATE
+    if [[ "$CONFIRM_UPDATE" != "y" ]]; then
+        echo -e "${YELLOW}已取消操作，系统保持原状。${NC}"
+        return 0
+    fi
+
+    echo -e "${GREEN}正在执行平滑升级...${NC}"
+    # DEBIAN_FRONTEND 防止升级过程中弹出全屏紫色的配置确认界面卡死脚本
+    DEBIAN_FRONTEND=noninteractive apt-get --only-upgrade install $update_targets -y
+    
+    echo -e "${GREEN}升级底层二进制文件完成，正在重启引擎...${NC}"
+    nginx -t && manage_services "restart"
+}
+
+# ==========================================
 # 模块：服务管理 (start/stop/restart/update)
 # ==========================================
 manage_services() {
@@ -323,8 +375,11 @@ manage_services() {
             else
                 echo -e "$svc:\t${RED}已停止 / 异常${NC}"
             fi
+        elif [ "$cmd" == "reload" ] && [[ "$svc" == "mariadb" || "$svc" == "redis-server" ]]; then
+            # 智能拦截：数据库不支持热重载，直接跳过防报错
+            echo -e "$svc reload\t[${YELLOW} SKIP (不支持热重载) ${NC}]"
         else
-            if systemctl "$cmd" "$svc"; then
+            if systemctl "$cmd" "$svc" 2>/dev/null; then
                 echo -e "$svc $cmd\t[${GREEN} OK ${NC}]"
             else
                 echo -e "$svc $cmd\t[${RED} FAIL ${NC}]"
@@ -655,7 +710,7 @@ case "$COMMAND" in
     install) install_lnmp ;;
     optimize) optimize_lnmp ;;
     start|stop|restart|reload|status) manage_services "$COMMAND" ;;
-    update) apt update && apt --only-upgrade install nginx mariadb-server php-fpm php-mysql redis-server -y && nginx -t && manage_services "reload" ;;
+    update) update_lnmp ;;
     bench) show_bench ;;
     top) manage_services "status"; show_top ;;
     backup) backup_site ;;
@@ -672,7 +727,7 @@ case "$COMMAND" in
         ;;
     *)
         echo -e "${GREEN}=========================================${NC}"
-        echo -e "  Debian 12 LNMP 管理中枢 v5.7 (专业稳定版)"
+        echo -e "  Debian 12 LNMP 管理中枢 v6.0 (专业稳定版)"
         echo -e "${GREEN}=========================================${NC}"
         echo -e "系统运维:"
         echo -e "  lnmp install       - 基础构建 (拉取稳定源/安全加固)"
